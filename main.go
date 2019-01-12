@@ -261,6 +261,21 @@ func dumpChannels(api *slack.Client, dir string, rooms []string) []slack.Channel
 		dumpChannel(api, dir, channel.ID, channel.Name, "channel")
 	}
 
+	//Dump Private Channel (conversation)
+	params := &slack.GetConversationsParameters{
+		Types: []string{"private_channel"},
+	}
+
+	t1, t2, t3 := api.GetConversations(params)
+	check(t3)
+	if t2 == ""{
+	}
+
+	for _,channel := range t1{
+		fmt.Println("dump channel " + channel.Name)
+		dumpChannel(api, dir, channel.ID, channel.Name, "private")
+	}
+
 	return channels
 }
 
@@ -300,6 +315,9 @@ func dumpChannel(api *slack.Client, dir, id, name, channelType string) {
 	} else if channelType == "dm" {
 		channelPath = path.Join("direct_message", name)
 		messages = fetchDirectMessageHistory(api, id)
+	}else if channelType == "private" {
+		channelPath = path.Join("channel", name)
+		messages = fetchConversationHistory(api, id)
 	} else {
 		channelPath = path.Join("channel", name)
 		messages = fetchChannelHistory(api, id)
@@ -378,6 +396,9 @@ func fetchChannelHistory(api *slack.Client, ID string) []slack.Message {
 	history, err := api.GetChannelHistory(ID, historyParams)
 	check(err)
 	messages := history.Messages
+	if len(messages) == 0{
+		return messages;
+	}
 	latest := messages[len(messages)-1].Timestamp
 	for {
 		if history.HasMore != true {
@@ -386,6 +407,38 @@ func fetchChannelHistory(api *slack.Client, ID string) []slack.Message {
 
 		historyParams.Latest = latest
 		history, err = api.GetChannelHistory(ID, historyParams)
+		check(err)
+		length := len(history.Messages)
+		if length > 0 {
+			latest = history.Messages[length-1].Timestamp
+			messages = append(messages, history.Messages...)
+		}
+
+	}
+
+	return messages
+}
+
+func fetchConversationHistory(api *slack.Client, ID string) []slack.Message {
+	historyParams := &slack.GetConversationHistoryParameters{
+		ChannelID: ID,
+	}
+
+	// Fetch History
+	history, err := api.GetConversationHistory(historyParams)
+	check(err)
+	messages := history.Messages
+	if len(messages) == 0{
+		return messages;
+	}
+	latest := messages[len(messages)-1].Timestamp
+	for {
+		if history.HasMore != true {
+			break
+		}
+
+		historyParams.Latest = latest
+		history, err = api.GetConversationHistory(historyParams)
 		check(err)
 		length := len(history.Messages)
 		if length > 0 {
